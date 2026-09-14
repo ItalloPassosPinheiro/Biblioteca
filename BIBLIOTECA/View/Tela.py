@@ -2,7 +2,6 @@ import flet as ft
 import psutil
 import wmi
 import cupy as cp
-import platform
 import time
 import asyncio
 
@@ -19,21 +18,42 @@ def main(page: ft.Page):
         padding=30
     )
 
-    # ==========================================================
-    # CONEXÕES
-    # ==========================================================
-
     computador = wmi.WMI()
 
-    # ==========================================================
-    # DADOS
-    # ==========================================================
+    cpu = ft.Text(
+        "0%",
+        size=28,
+        weight="bold",
+        color="#FFFFFF"
+    )
 
-    cpu = ft.Text("0%", size=28, weight="bold", color="#FFFFFF")
-    ram = ft.Text("0%", size=28, weight="bold", color="#FFFFFF")
-    disco = ft.Text("0%", size=28, weight="bold", color="#FFFFFF")
-    download = ft.Text("0 MB/s", size=28, weight="bold", color="#FFFFFF")
-    upload = ft.Text("0 MB/s", size=28, weight="bold", color="#FFFFFF")
+    ram = ft.Text(
+        "0%",
+        size=28,
+        weight="bold",
+        color="#FFFFFF"
+    )
+
+    disco = ft.Text(
+        "0%",
+        size=28,
+        weight="bold",
+        color="#FFFFFF"
+    )
+
+    download = ft.Text(
+        "0 MB/s",
+        size=28,
+        weight="bold",
+        color="#FFFFFF"
+    )
+
+    upload = ft.Text(
+        "0 MB/s",
+        size=28,
+        weight="bold",
+        color="#FFFFFF"
+    )
 
     processador = ft.Text("--", color="#FFFFFF")
     placa_mae = ft.Text("--", color="#FFFFFF")
@@ -45,10 +65,6 @@ def main(page: ft.Page):
     gpu_memoria = ft.Text("--", color="#FFFFFF")
     cuda = ft.Text("--", color="#FFFFFF")
 
-    # ==========================================================
-    # INFORMAÇÕES WMI
-    # ==========================================================
-
     try:
 
         processador.value = computador.Win32_Processor()[0].Name.strip()
@@ -59,9 +75,7 @@ def main(page: ft.Page):
             + computador.Win32_BaseBoard()[0].Product
         )
 
-        sistema.value = (
-            computador.Win32_OperatingSystem()[0].Caption
-        )
+        sistema.value = computador.Win32_OperatingSystem()[0].Caption
 
         bios.value = computador.Win32_BIOS()[0].SMBIOSBIOSVersion
 
@@ -69,10 +83,6 @@ def main(page: ft.Page):
 
     except Exception:
         pass
-
-    # ==========================================================
-    # INFORMAÇÕES CUPY
-    # ==========================================================
 
     try:
 
@@ -94,10 +104,6 @@ def main(page: ft.Page):
         gpu_memoria.value = "--"
         cuda.value = "--"
 
-    # ==========================================================
-    # ATUALIZAR DADOS
-    # ==========================================================
-
     dados_rede = psutil.net_io_counters()
 
     download_anterior = dados_rede.bytes_recv
@@ -110,16 +116,10 @@ def main(page: ft.Page):
         nonlocal upload_anterior
         nonlocal tempo_anterior
 
-        # CPU
         cpu.value = f"{psutil.cpu_percent()}%"
-
-        # RAM
         ram.value = f"{psutil.virtual_memory().percent}%"
-
-        # DISCO
         disco.value = f"{psutil.disk_usage('/').percent}%"
 
-        # REDE
         rede = psutil.net_io_counters()
 
         tempo = time.time() - tempo_anterior
@@ -143,20 +143,14 @@ def main(page: ft.Page):
 
         page.update()
 
-    # ==========================================================
-    # ATUALIZAÇÃO AUTOMÁTICA
-    # ==========================================================
-
-    def atualizar_automaticamente():
+    async def atualizar_automaticamente():
 
         while True:
-
             atualizar()
-
-            time.sleep(2)
+            await asyncio.sleep(2)
 
     # ==========================================================
-    # TELAS
+    # DESEMPENHO
     # ==========================================================
 
     def tela_desempenho():
@@ -168,9 +162,14 @@ def main(page: ft.Page):
 
                 ft.Text(
                     "Desempenho",
-                    size=28,
+                    size=30,
                     weight="bold",
-                    color="#FFFFFF"
+                    color="#00FF99"
+                ),
+
+                ft.Text(
+                    "Monitoramento em tempo real",
+                    color="#9CA3AF"
                 ),
 
                 ft.Row([
@@ -181,8 +180,22 @@ def main(page: ft.Page):
                         bgcolor="#1A1D24",
                         border_radius=10,
                         content=ft.Column([
-                            ft.Text("Processador", color="#9CA3AF"),
+
+                            ft.Row([
+                                ft.Text(
+                                    "Processador",
+                                    color="#2563EB"
+                                ),
+
+                                ft.Icon(
+                                    ft.Icons.MEMORY,
+                                    color="#2563EB"
+                                )
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
                             cpu
+
                         ])
                     ),
 
@@ -192,8 +205,22 @@ def main(page: ft.Page):
                         bgcolor="#1A1D24",
                         border_radius=10,
                         content=ft.Column([
-                            ft.Text("Memória RAM", color="#9CA3AF"),
+
+                            ft.Row([
+                                ft.Text(
+                                    "Memória RAM",
+                                    color="#2563EB"
+                                ),
+
+                                ft.Icon(
+                                    ft.Icons.MEMORY,
+                                    color="#2563EB"
+                                )
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
                             ram
+
                         ])
                     ),
 
@@ -203,8 +230,22 @@ def main(page: ft.Page):
                         bgcolor="#1A1D24",
                         border_radius=10,
                         content=ft.Column([
-                            ft.Text("Armazenamento", color="#9CA3AF"),
+
+                            ft.Row([
+                                ft.Text(
+                                    "Armazenamento",
+                                    color="#2563EB"
+                                ),
+
+                                ft.Icon(
+                                    ft.Icons.STORAGE,
+                                    color="#2563EB"
+                                )
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
                             disco
+
                         ])
                     )
 
@@ -214,14 +255,23 @@ def main(page: ft.Page):
                     padding=20,
                     bgcolor="#1A1D24",
                     border_radius=10,
+
                     content=ft.Column([
 
-                        ft.Text(
-                            "Rede",
-                            size=20,
-                            weight="bold",
-                            color="#FFFFFF"
-                        ),
+                        ft.Row([
+                            ft.Text(
+                                "Rede",
+                                size=20,
+                                weight="bold",
+                                color="#2563EB"
+                            ),
+
+                            ft.Icon(
+                                ft.Icons.NETWORK_CHECK,
+                                color="#2563EB"
+                            )
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
 
                         ft.Divider(color="#2C313B"),
 
@@ -244,6 +294,10 @@ def main(page: ft.Page):
             ]
         )
 
+    # ==========================================================
+    # HARDWARE
+    # ==========================================================
+
     def tela_hardware():
 
         return ft.Column(
@@ -253,9 +307,14 @@ def main(page: ft.Page):
 
                 ft.Text(
                     "Hardware",
-                    size=28,
+                    size=30,
                     weight="bold",
-                    color="#FFFFFF"
+                    color="#00FF99"
+                ),
+
+                ft.Text(
+                    "Informações do computador",
+                    color="#9CA3AF"
                 ),
 
                 ft.Container(
@@ -266,34 +325,66 @@ def main(page: ft.Page):
 
                     content=ft.Column([
 
-                        ft.Text(
-                            "Informações do computador",
-                            size=20,
-                            weight="bold",
-                            color="#FFFFFF"
-                        ),
+                        ft.Row([
+                            ft.Text(
+                                "Componentes",
+                                size=20,
+                                weight="bold",
+                                color="#2563EB"
+                            ),
+
+                            ft.Icon(
+                                ft.Icons.COMPUTER,
+                                color="#2563EB"
+                            )
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
 
                         ft.Divider(color="#2C313B"),
 
-                        ft.Text("Processador", color="#9CA3AF"),
+                        ft.Text(
+                            "Processador",
+                            color="#9CA3AF"
+                        ),
+
                         processador,
 
-                        ft.Text("Placa-mãe", color="#9CA3AF"),
+                        ft.Text(
+                            "Placa-mãe",
+                            color="#9CA3AF"
+                        ),
+
                         placa_mae,
 
-                        ft.Text("Sistema operacional", color="#9CA3AF"),
+                        ft.Text(
+                            "Sistema operacional",
+                            color="#9CA3AF"
+                        ),
+
                         sistema,
 
-                        ft.Text("BIOS", color="#9CA3AF"),
+                        ft.Text(
+                            "BIOS",
+                            color="#9CA3AF"
+                        ),
+
                         bios,
 
-                        ft.Text("Placa de vídeo", color="#9CA3AF"),
+                        ft.Text(
+                            "Placa de vídeo",
+                            color="#9CA3AF"
+                        ),
+
                         gpu_wmi
 
                     ])
                 )
             ]
         )
+
+    # ==========================================================
+    # PLACA DE VÍDEO
+    # ==========================================================
 
     def tela_gpu():
 
@@ -304,9 +395,14 @@ def main(page: ft.Page):
 
                 ft.Text(
                     "Placa de Vídeo",
-                    size=28,
+                    size=30,
                     weight="bold",
-                    color="#FFFFFF"
+                    color="#00FF99"
+                ),
+
+                ft.Text(
+                    "Informações e recursos gráficos",
+                    color="#9CA3AF"
                 ),
 
                 ft.Container(
@@ -317,22 +413,42 @@ def main(page: ft.Page):
 
                     content=ft.Column([
 
-                        ft.Text(
-                            "Informações da GPU",
-                            size=20,
-                            weight="bold",
-                            color="#FFFFFF"
-                        ),
+                        ft.Row([
+                            ft.Text(
+                                "Informações da GPU",
+                                size=20,
+                                weight="bold",
+                                color="#2563EB"
+                            ),
+
+                            ft.Icon(
+                                ft.Icons.VIDEOGAME_ASSET,
+                                color="#2563EB"
+                            )
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
 
                         ft.Divider(color="#2C313B"),
 
-                        ft.Text("GPU", color="#9CA3AF"),
+                        ft.Text(
+                            "GPU",
+                            color="#9CA3AF"
+                        ),
+
                         gpu_nome,
 
-                        ft.Text("Memória", color="#9CA3AF"),
+                        ft.Text(
+                            "Memória",
+                            color="#9CA3AF"
+                        ),
+
                         gpu_memoria,
 
-                        ft.Text("CUDA", color="#9CA3AF"),
+                        ft.Text(
+                            "CUDA",
+                            color="#9CA3AF"
+                        ),
+
                         cuda
 
                     ])
@@ -349,10 +465,6 @@ def main(page: ft.Page):
         "Placa de Vídeo": tela_gpu()
 
     }
-
-    # ==========================================================
-    # NAVEGAÇÃO
-    # ==========================================================
 
     def navegar(e):
 
@@ -373,7 +485,7 @@ def main(page: ft.Page):
                 ft.Icon(
                     icone,
                     size=22,
-                    color="#9CA3AF"
+                    color="#2563EB"
                 ),
 
                 ft.Text(
@@ -383,10 +495,6 @@ def main(page: ft.Page):
 
             ])
         )
-
-    # ==========================================================
-    # MENU
-    # ==========================================================
 
     menu = ft.Container(
         width=230,
@@ -399,13 +507,13 @@ def main(page: ft.Page):
                 "PC ANALYZER",
                 size=22,
                 weight="bold",
-                color="#FFFFFF"
+                color="#00FF99"
             ),
 
             ft.Text(
                 "Monitoramento do computador",
                 size=12,
-                color="#6B7280"
+                color="#9CA3AF"
             ),
 
             ft.Divider(color="#2C313B"),
@@ -427,10 +535,6 @@ def main(page: ft.Page):
 
         ])
     )
-
-    # ==========================================================
-    # TELA
-    # ==========================================================
 
     page.add(
 
@@ -456,11 +560,7 @@ def main(page: ft.Page):
 
     atualizar()
 
-    async def atualizar_automaticamente():
-
-        while True:
-            atualizar()
-            await asyncio.sleep(2)
+    page.run_task(atualizar_automaticamente)
 
 
 ft.app(target=main)
