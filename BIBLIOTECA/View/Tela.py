@@ -1,5 +1,10 @@
 import flet as ft
+import psutil
+import wmi
 import cupy as cp
+import platform
+import time
+import asyncio
 
 
 def main(page: ft.Page):
@@ -9,71 +14,210 @@ def main(page: ft.Page):
     page.window.maximized = True
     page.bgcolor = "#111318"
 
-    conteudo = ft.Container(expand=True, padding=25)
+    conteudo = ft.Container(
+        expand=True,
+        padding=30
+    )
 
-    def titulo(nome, descricao):
-        return ft.Text(
-            nome,
-            size=28,
-            weight="bold",
-            color="#FFFFFF"
+    # ==========================================================
+    # CONEXÕES
+    # ==========================================================
+
+    computador = wmi.WMI()
+
+    # ==========================================================
+    # DADOS
+    # ==========================================================
+
+    cpu = ft.Text("0%", size=28, weight="bold", color="#FFFFFF")
+    ram = ft.Text("0%", size=28, weight="bold", color="#FFFFFF")
+    disco = ft.Text("0%", size=28, weight="bold", color="#FFFFFF")
+    download = ft.Text("0 MB/s", size=28, weight="bold", color="#FFFFFF")
+    upload = ft.Text("0 MB/s", size=28, weight="bold", color="#FFFFFF")
+
+    processador = ft.Text("--", color="#FFFFFF")
+    placa_mae = ft.Text("--", color="#FFFFFF")
+    sistema = ft.Text("--", color="#FFFFFF")
+    bios = ft.Text("--", color="#FFFFFF")
+    gpu_wmi = ft.Text("--", color="#FFFFFF")
+
+    gpu_nome = ft.Text("--", color="#FFFFFF")
+    gpu_memoria = ft.Text("--", color="#FFFFFF")
+    cuda = ft.Text("--", color="#FFFFFF")
+
+    # ==========================================================
+    # INFORMAÇÕES WMI
+    # ==========================================================
+
+    try:
+
+        processador.value = computador.Win32_Processor()[0].Name.strip()
+
+        placa_mae.value = (
+            computador.Win32_BaseBoard()[0].Manufacturer
+            + " "
+            + computador.Win32_BaseBoard()[0].Product
         )
 
-    def card(nome, valor, icone, cor):
-        return ft.Container(
-            expand=True,
-            padding=20,
-            bgcolor="#1A1D24",
-            border_radius=10,
-            content=ft.Column([
-                ft.Row([
-                    ft.Text(nome, color="#9CA3AF"),
-                    ft.Icon(icone, color=cor)
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-
-                valor
-            ])
+        sistema.value = (
+            computador.Win32_OperatingSystem()[0].Caption
         )
 
-    def tela(nome, icone, cor):
+        bios.value = computador.Win32_BIOS()[0].SMBIOSBIOSVersion
+
+        gpu_wmi.value = computador.Win32_VideoController()[0].Name
+
+    except Exception:
+        pass
+
+    # ==========================================================
+    # INFORMAÇÕES CUPY
+    # ==========================================================
+
+    try:
+
+        dispositivo = cp.cuda.Device()
+
+        gpu_nome.value = cp.cuda.runtime.getDeviceProperties(
+            dispositivo.id
+        )["name"].decode()
+
+        memoria = dispositivo.mem_info[1] / (1024 ** 3)
+
+        gpu_memoria.value = f"{memoria:.2f} GB"
+
+        cuda.value = cp.cuda.runtime.runtimeGetVersion()
+
+    except Exception:
+
+        gpu_nome.value = "GPU/CUDA não disponível"
+        gpu_memoria.value = "--"
+        cuda.value = "--"
+
+    # ==========================================================
+    # ATUALIZAR DADOS
+    # ==========================================================
+
+    dados_rede = psutil.net_io_counters()
+
+    download_anterior = dados_rede.bytes_recv
+    upload_anterior = dados_rede.bytes_sent
+    tempo_anterior = time.time()
+
+    def atualizar(e=None):
+
+        nonlocal download_anterior
+        nonlocal upload_anterior
+        nonlocal tempo_anterior
+
+        # CPU
+        cpu.value = f"{psutil.cpu_percent()}%"
+
+        # RAM
+        ram.value = f"{psutil.virtual_memory().percent}%"
+
+        # DISCO
+        disco.value = f"{psutil.disk_usage('/').percent}%"
+
+        # REDE
+        rede = psutil.net_io_counters()
+
+        tempo = time.time() - tempo_anterior
+
+        if tempo > 0:
+
+            velocidade_download = (
+                rede.bytes_recv - download_anterior
+            ) / tempo / (1024 ** 2)
+
+            velocidade_upload = (
+                rede.bytes_sent - upload_anterior
+            ) / tempo / (1024 ** 2)
+
+            download.value = f"{velocidade_download:.2f} MB/s"
+            upload.value = f"{velocidade_upload:.2f} MB/s"
+
+        download_anterior = rede.bytes_recv
+        upload_anterior = rede.bytes_sent
+        tempo_anterior = time.time()
+
+        page.update()
+
+    # ==========================================================
+    # ATUALIZAÇÃO AUTOMÁTICA
+    # ==========================================================
+
+    def atualizar_automaticamente():
+
+        while True:
+
+            atualizar()
+
+            time.sleep(2)
+
+    # ==========================================================
+    # TELAS
+    # ==========================================================
+
+    def tela_desempenho():
 
         return ft.Column(
             expand=True,
             spacing=20,
             controls=[
-                titulo(nome, ""),
+
+                ft.Text(
+                    "Desempenho",
+                    size=28,
+                    weight="bold",
+                    color="#FFFFFF"
+                ),
 
                 ft.Row([
-                    card(
-                        "Utilização",
-                        ft.Text("0%", size=28, weight="bold", color="#FFFFFF"),
-                        icone,
-                        cor
+
+                    ft.Container(
+                        expand=True,
+                        padding=20,
+                        bgcolor="#1A1D24",
+                        border_radius=10,
+                        content=ft.Column([
+                            ft.Text("Processador", color="#9CA3AF"),
+                            cpu
+                        ])
                     ),
 
-                    card(
-                        "Temperatura",
-                        ft.Text("-- °C", size=28, weight="bold", color="#FFFFFF"),
-                        ft.Icons.THERMOSTAT,
-                        "#EF4444"
+                    ft.Container(
+                        expand=True,
+                        padding=20,
+                        bgcolor="#1A1D24",
+                        border_radius=10,
+                        content=ft.Column([
+                            ft.Text("Memória RAM", color="#9CA3AF"),
+                            ram
+                        ])
                     ),
 
-                    card(
-                        "Frequência",
-                        ft.Text("-- GHz", size=28, weight="bold", color="#FFFFFF"),
-                        ft.Icons.SPEED,
-                        "#3B82F6"
+                    ft.Container(
+                        expand=True,
+                        padding=20,
+                        bgcolor="#1A1D24",
+                        border_radius=10,
+                        content=ft.Column([
+                            ft.Text("Armazenamento", color="#9CA3AF"),
+                            disco
+                        ])
                     )
+
                 ]),
 
                 ft.Container(
-                    expand=True,
                     padding=20,
                     bgcolor="#1A1D24",
                     border_radius=10,
                     content=ft.Column([
+
                         ft.Text(
-                            "Informações",
+                            "Rede",
                             size=20,
                             weight="bold",
                             color="#FFFFFF"
@@ -82,156 +226,220 @@ def main(page: ft.Page):
                         ft.Divider(color="#2C313B"),
 
                         ft.Text(
-                            "Dados do componente aparecerão aqui.",
+                            "Download",
                             color="#9CA3AF"
-                        )
+                        ),
+
+                        download,
+
+                        ft.Text(
+                            "Upload",
+                            color="#9CA3AF"
+                        ),
+
+                        upload
+
                     ])
                 )
             ]
         )
 
-    dashboard = ft.Column(
-        expand=True,
-        spacing=20,
-        controls=[
+    def tela_hardware():
 
-            titulo("Dashboard", ""),
+        return ft.Column(
+            expand=True,
+            spacing=20,
+            controls=[
 
-            ft.Row([
-                card(
-                    "CPU",
-                    ft.Text("0%", size=28, weight="bold", color="#FFFFFF"),
-                    ft.Icons.MEMORY,
-                    "#3B82F6"
+                ft.Text(
+                    "Hardware",
+                    size=28,
+                    weight="bold",
+                    color="#FFFFFF"
                 ),
 
-                card(
-                    "RAM",
-                    ft.Text("0%", size=28, weight="bold", color="#FFFFFF"),
-                    ft.Icons.MEMORY,
-                    "#8B5CF6"
-                ),
+                ft.Container(
+                    expand=True,
+                    padding=25,
+                    bgcolor="#1A1D24",
+                    border_radius=10,
 
-                card(
-                    "Disco",
-                    ft.Text("0%", size=28, weight="bold", color="#FFFFFF"),
-                    ft.Icons.STORAGE,
-                    "#F59E0B"
-                ),
+                    content=ft.Column([
 
-                card(
-                    "GPU",
-                    ft.Text("0%", size=28, weight="bold", color="#FFFFFF"),
-                    ft.Icons.VIDEOGAME_ASSET,
-                    "#22C55E"
+                        ft.Text(
+                            "Informações do computador",
+                            size=20,
+                            weight="bold",
+                            color="#FFFFFF"
+                        ),
+
+                        ft.Divider(color="#2C313B"),
+
+                        ft.Text("Processador", color="#9CA3AF"),
+                        processador,
+
+                        ft.Text("Placa-mãe", color="#9CA3AF"),
+                        placa_mae,
+
+                        ft.Text("Sistema operacional", color="#9CA3AF"),
+                        sistema,
+
+                        ft.Text("BIOS", color="#9CA3AF"),
+                        bios,
+
+                        ft.Text("Placa de vídeo", color="#9CA3AF"),
+                        gpu_wmi
+
+                    ])
                 )
-            ]),
+            ]
+        )
 
-            ft.Container(
-                expand=True,
-                padding=20,
-                bgcolor="#1A1D24",
-                border_radius=10,
-                content=ft.Column([
-                    ft.Text(
-                        "Status do computador",
-                        size=20,
-                        weight="bold",
-                        color="#FFFFFF"
-                    ),
+    def tela_gpu():
 
-                    ft.Divider(color="#2C313B"),
+        return ft.Column(
+            expand=True,
+            spacing=20,
+            controls=[
 
-                    ft.Text("CPU: Normal", color="#22C55E"),
-                    ft.Text("RAM: Normal", color="#22C55E"),
-                    ft.Text("GPU: Normal", color="#22C55E"),
-                    ft.Text("Disco: Normal", color="#22C55E")
-                ])
-            )
-        ]
-    )
+                ft.Text(
+                    "Placa de Vídeo",
+                    size=28,
+                    weight="bold",
+                    color="#FFFFFF"
+                ),
+
+                ft.Container(
+                    expand=True,
+                    padding=25,
+                    bgcolor="#1A1D24",
+                    border_radius=10,
+
+                    content=ft.Column([
+
+                        ft.Text(
+                            "Informações da GPU",
+                            size=20,
+                            weight="bold",
+                            color="#FFFFFF"
+                        ),
+
+                        ft.Divider(color="#2C313B"),
+
+                        ft.Text("GPU", color="#9CA3AF"),
+                        gpu_nome,
+
+                        ft.Text("Memória", color="#9CA3AF"),
+                        gpu_memoria,
+
+                        ft.Text("CUDA", color="#9CA3AF"),
+                        cuda
+
+                    ])
+                )
+            ]
+        )
 
     telas = {
-        "Dashboard": dashboard,
 
-        "Processador": tela(
-            "Processador",
-            ft.Icons.MEMORY,
-            "#3B82F6"
-        ),
+        "Desempenho": tela_desempenho(),
 
-        "GPU": tela(
-            "GPU",
-            ft.Icons.VIDEOGAME_ASSET,
-            "#22C55E"
-        ),
+        "Hardware": tela_hardware(),
 
-        "Memória": tela(
-            "Memória RAM",
-            ft.Icons.MEMORY,
-            "#8B5CF6"
-        ),
+        "Placa de Vídeo": tela_gpu()
 
-        "Armazenamento": tela(
-            "Armazenamento",
-            ft.Icons.STORAGE,
-            "#F59E0B"
-        ),
-
-        "Rede": tela(
-            "Rede",
-            ft.Icons.NETWORK_CHECK,
-            "#3B82F6"
-        )
     }
 
+    # ==========================================================
+    # NAVEGAÇÃO
+    # ==========================================================
+
     def navegar(e):
+
         conteudo.content = telas[e.control.data]
+
         page.update()
 
     def botao(nome, icone):
+
         return ft.Container(
-            padding=12,
-            border_radius=8,
+            padding=15,
+            border_radius=10,
             data=nome,
             on_click=navegar,
+
             content=ft.Row([
-                ft.Icon(icone, color="#9CA3AF"),
-                ft.Text(nome, color="#9CA3AF")
+
+                ft.Icon(
+                    icone,
+                    size=22,
+                    color="#9CA3AF"
+                ),
+
+                ft.Text(
+                    nome,
+                    color="#FFFFFF"
+                )
+
             ])
         )
 
+    # ==========================================================
+    # MENU
+    # ==========================================================
+
     menu = ft.Container(
-        width=200,
+        width=230,
         bgcolor="#17191F",
         padding=20,
+
         content=ft.Column([
 
             ft.Text(
                 "PC ANALYZER",
-                size=20,
+                size=22,
                 weight="bold",
                 color="#FFFFFF"
             ),
 
+            ft.Text(
+                "Monitoramento do computador",
+                size=12,
+                color="#6B7280"
+            ),
+
             ft.Divider(color="#2C313B"),
 
-            botao("Dashboard", ft.Icons.DASHBOARD),
-            botao("Processador", ft.Icons.MEMORY),
-            botao("GPU", ft.Icons.VIDEOGAME_ASSET),
-            botao("Memória", ft.Icons.MEMORY),
-            botao("Armazenamento", ft.Icons.STORAGE),
-            botao("Rede", ft.Icons.NETWORK_CHECK),
+            botao(
+                "Desempenho",
+                ft.Icons.SPEED
+            ),
 
-            ft.Container(expand=True)
+            botao(
+                "Hardware",
+                ft.Icons.COMPUTER
+            ),
+
+            botao(
+                "Placa de Vídeo",
+                ft.Icons.VIDEOGAME_ASSET
+            )
+
         ])
     )
 
+    # ==========================================================
+    # TELA
+    # ==========================================================
+
     page.add(
+
         ft.Row(
             expand=True,
             spacing=0,
+
             controls=[
+
                 menu,
 
                 ft.Container(
@@ -239,11 +447,20 @@ def main(page: ft.Page):
                     bgcolor="#111318",
                     content=conteudo
                 )
+
             ]
         )
     )
 
-    conteudo.content = telas["Dashboard"]
+    conteudo.content = telas["Desempenho"]
+
+    atualizar()
+
+    async def atualizar_automaticamente():
+
+        while True:
+            atualizar()
+            await asyncio.sleep(2)
 
 
 ft.app(target=main)
