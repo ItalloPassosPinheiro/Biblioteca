@@ -4,11 +4,7 @@ import wmi
 import cupy as cp
 import time
 import asyncio
-from collections import deque
-from datetime import datetime
-import sqlite3
 import os
-
 
 def main(page: ft.Page):
 
@@ -17,59 +13,10 @@ def main(page: ft.Page):
     page.window.maximized = True
     page.bgcolor = "#111318"
 
-    # ==========================================================
-    # CONFIGURAÇÕES DA ANÁLISE
-    # ==========================================================
-
-    BANCO = "historico_desempenho.db"
+    # Limites usados pelo diagnóstico
     LIMITE_CPU = 85
     LIMITE_RAM = 85
     LIMITE_DISCO = 90
-
-    historico_cpu = deque(maxlen=30)
-    historico_ram = deque(maxlen=30)
-    historico_disco = deque(maxlen=30)
-
-    def preparar_banco():
-        with sqlite3.connect(BANCO) as conexao:
-            conexao.execute("""
-                CREATE TABLE IF NOT EXISTS desempenho (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    data_hora TEXT NOT NULL,
-                    cpu REAL NOT NULL,
-                    ram REAL NOT NULL,
-                    disco REAL NOT NULL,
-                    download REAL NOT NULL,
-                    upload REAL NOT NULL
-                )
-            """)
-            conexao.commit()
-
-    preparar_banco()
-
-    def salvar_historico(cpu_val, ram_val, disco_val, download_val, upload_val):
-        with sqlite3.connect(BANCO) as conexao:
-            conexao.execute(
-                """
-                INSERT INTO desempenho
-                (data_hora, cpu, ram, disco, download, upload)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                    cpu_val, ram_val, disco_val, download_val, upload_val
-                )
-            )
-            conexao.commit()
-
-    def nivel_desempenho(valor):
-        if valor >= 90:
-            return "CRÍTICO"
-        if valor >= 75:
-            return "ALTO"
-        if valor >= 50:
-            return "MODERADO"
-        return "NORMAL"
 
     def diagnosticar(cpu_val, ram_val, disco_val):
         problemas = []
@@ -93,7 +40,6 @@ def main(page: ft.Page):
             return "✓ Nenhum problema importante identificado."
 
         return "⚠ " + " | ".join(problemas)
-
 
     conteudo = ft.Container(
         expand=True,
@@ -160,30 +106,17 @@ def main(page: ft.Page):
         size=15
     )
 
-    processo_lista = ft.Column(
-        spacing=8,
-        scroll=ft.ScrollMode.AUTO
-    )
-
     grafico_cpu = ft.ProgressBar(value=0, color="#00FF99", bgcolor="#2C313B")
     grafico_ram = ft.ProgressBar(value=0, color="#2563EB", bgcolor="#2C313B")
     grafico_disco = ft.ProgressBar(value=0, color="#F59E0B", bgcolor="#2C313B")
 
-
     try:
 
         processador.value = computador.Win32_Processor()[0].Name.strip()
-
-        placa_mae.value = (
-            computador.Win32_BaseBoard()[0].Manufacturer
-            + " "
-            + computador.Win32_BaseBoard()[0].Product
-        )
-
+        placa = computador.Win32_BaseBoard()[0]
+        placa_mae.value = f"{placa.Manufacturer} {placa.Product}"
         sistema.value = computador.Win32_OperatingSystem()[0].Caption
-
         bios.value = computador.Win32_BIOS()[0].SMBIOSBIOSVersion
-
         gpu_wmi.value = computador.Win32_VideoController()[0].Name
 
     except Exception:
@@ -232,10 +165,6 @@ def main(page: ft.Page):
         grafico_ram.value = ram_val / 100
         grafico_disco.value = disco_val / 100
 
-        historico_cpu.append(cpu_val)
-        historico_ram.append(ram_val)
-        historico_disco.append(disco_val)
-
         rede = psutil.net_io_counters()
         tempo = time.time() - tempo_anterior
 
@@ -273,70 +202,6 @@ def main(page: ft.Page):
             status_geral.value = "DESEMPENHO NORMAL"
             status_geral.color = "#00FF99"
 
-        salvar_historico(
-            cpu_val, ram_val, disco_val,
-            velocidade_download, velocidade_upload
-        )
-
-        # Processos que mais consomem CPU.
-        processos = []
-        for proc in psutil.process_iter(
-            ["pid", "name", "cpu_percent", "memory_percent"]
-        ):
-            try:
-                info = proc.info
-                processos.append((
-                    info["cpu_percent"] or 0,
-                    info["memory_percent"] or 0,
-                    info["name"] or "Desconhecido",
-                    info["pid"]
-                ))
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-
-        processos.sort(reverse=True, key=lambda x: x[0])
-
-        processo_lista.controls.clear()
-
-        for cpu_proc, ram_proc, nome, pid in processos[:6]:
-            processo_lista.controls.append(
-                ft.Container(
-                    padding=10,
-                    bgcolor="#111318",
-                    border_radius=8,
-                    content=ft.Row(
-                        [
-                            ft.Container(
-                                expand=True,
-                                content=ft.Column(
-                                    [
-                                        ft.Text(
-                                            nome,
-                                            color="#FFFFFF",
-                                            weight="bold"
-                                        ),
-                                        ft.Text(
-                                            f"PID: {pid}",
-                                            color="#9CA3AF",
-                                            size=11
-                                        )
-                                    ],
-                                    spacing=2
-                                )
-                            ),
-                            ft.Text(
-                                f"CPU {cpu_proc:.1f}%",
-                                color="#00FF99"
-                            ),
-                            ft.Text(
-                                f"RAM {ram_proc:.1f}%",
-                                color="#2563EB"
-                            )
-                        ]
-                    )
-                )
-            )
-
         page.update()
 
     async def atualizar_automaticamente():
@@ -344,10 +209,6 @@ def main(page: ft.Page):
         while True:
             atualizar()
             await asyncio.sleep(2)
-
-    # ==========================================================
-    # DESEMPENHO
-    # ==========================================================
 
     def tela_desempenho():
 
@@ -490,10 +351,6 @@ def main(page: ft.Page):
             ]
         )
 
-    # ==========================================================
-    # HARDWARE
-    # ==========================================================
-
     def tela_hardware():
 
         return ft.Column(
@@ -578,10 +435,6 @@ def main(page: ft.Page):
             ]
         )
 
-    # ==========================================================
-    # PLACA DE VÍDEO
-    # ==========================================================
-
     def tela_gpu():
 
         return ft.Column(
@@ -652,10 +505,6 @@ def main(page: ft.Page):
             ]
         )
 
-    # ==========================================================
-    # DIAGNÓSTICO
-    # ==========================================================
-
     def tela_diagnostico():
         return ft.Column(
             expand=True,
@@ -715,124 +564,6 @@ def main(page: ft.Page):
             ]
         )
 
-    # ==========================================================
-    # PROCESSOS
-    # ==========================================================
-
-    def tela_processos():
-        return ft.Column(
-            expand=True,
-            spacing=20,
-            controls=[
-                ft.Text(
-                    "Processos",
-                    size=30,
-                    weight="bold",
-                    color="#00FF99"
-                ),
-                ft.Text(
-                    "Aplicações que mais utilizam os recursos do computador",
-                    color="#9CA3AF"
-                ),
-                ft.Container(
-                    expand=True,
-                    padding=20,
-                    bgcolor="#1A1D24",
-                    border_radius=10,
-                    content=ft.Column(
-                        [
-                            ft.Row(
-                                [
-                                    ft.Text(
-                                        "Processo",
-                                        size=20,
-                                        weight="bold",
-                                        color="#2563EB"
-                                    ),
-                                    ft.Icon(
-                                        ft.Icons.TASK,
-                                        color="#2563EB"
-                                    )
-                                ],
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-                            ),
-                            ft.Divider(color="#2C313B"),
-                            processo_lista
-                        ]
-                    )
-                )
-            ]
-        )
-
-    # ==========================================================
-    # HISTÓRICO
-    # ==========================================================
-
-    def tela_historico():
-        registros = []
-
-        try:
-            with sqlite3.connect(BANCO) as conexao:
-                registros = conexao.execute(
-                    """
-                    SELECT data_hora, cpu, ram, disco
-                    FROM desempenho
-                    ORDER BY id DESC
-                    LIMIT 20
-                    """
-                ).fetchall()
-        except Exception:
-            pass
-
-        linhas = [
-            ft.DataRow(
-                cells=[
-                    ft.DataCell(ft.Text(data, color="#FFFFFF")),
-                    ft.DataCell(ft.Text(f"{c:.0f}%", color="#FFFFFF")),
-                    ft.DataCell(ft.Text(f"{r:.0f}%", color="#FFFFFF")),
-                    ft.DataCell(ft.Text(f"{d:.0f}%", color="#FFFFFF"))
-                ]
-            )
-            for data, c, r, d in registros
-        ]
-
-        tabela = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("Data", color="#9CA3AF")),
-                ft.DataColumn(ft.Text("CPU", color="#9CA3AF")),
-                ft.DataColumn(ft.Text("RAM", color="#9CA3AF")),
-                ft.DataColumn(ft.Text("Disco", color="#9CA3AF"))
-            ],
-            rows=linhas
-        )
-
-        return ft.Column(
-            expand=True,
-            spacing=20,
-            controls=[
-                ft.Text(
-                    "Histórico",
-                    size=30,
-                    weight="bold",
-                    color="#00FF99"
-                ),
-                ft.Text(
-                    "Últimas medições registradas",
-                    color="#9CA3AF"
-                ),
-                ft.Container(
-                    expand=True,
-                    padding=20,
-                    bgcolor="#1A1D24",
-                    border_radius=10,
-                    content=ft.Column(
-                        [tabela],
-                        scroll=ft.ScrollMode.AUTO
-                    )
-                )
-            ]
-        )
-
     telas = {
 
         "Desempenho": tela_desempenho(),
@@ -841,8 +572,6 @@ def main(page: ft.Page):
 
         "Placa de Vídeo": tela_gpu(),
         "Diagnóstico": tela_diagnostico(),
-        "Processos": tela_processos(),
-        "Histórico": tela_historico()
 
     }
 
@@ -918,16 +647,6 @@ def main(page: ft.Page):
                 ft.Icons.HEALTH_AND_SAFETY
             ),
 
-            botao(
-                "Processos",
-                ft.Icons.TASK
-            ),
-
-            botao(
-                "Histórico",
-                ft.Icons.HISTORY
-            )
-
         ])
     )
 
@@ -957,5 +676,4 @@ def main(page: ft.Page):
 
     page.run_task(atualizar_automaticamente)
 
-
-ft.app(target=main)
+ft.run(main)
